@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include "PID.h"
 #include <math.h>
+#include <stdlib.h> 
 
 // for convenience
 using json = nlohmann::json;
@@ -28,14 +29,29 @@ std::string hasData(std::string s) {
   return "";
 }
 
-int main()
+int main(int argc, char *argv[])
 {
   uWS::Hub h;
 
+  int max_steps = atoi(argv[4]);
+  int num_of_steps = 0;
+  double total_cte = 0.0;
+
   PID pid;
   // TODO: Initialize the pid variable.
+  double init_Kp = atof(argv[1]);
+  double init_Ki = atof(argv[2]);
+  double init_Kd = atof(argv[3]);
+  pid.Init(init_Kp, init_Ki, init_Kd);
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  h.onMessage([&pid, &max_steps, &num_of_steps, &total_cte](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+    num_of_steps++;
+
+    if (max_steps > 0 && num_of_steps > max_steps)
+    {
+      exit(EXIT_SUCCESS);
+    }
+
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -50,6 +66,11 @@ int main()
           double cte = std::stod(j[1]["cte"].get<std::string>());
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
+
+          total_cte += cte;
+          double mean_cte = total_cte/num_of_steps;
+          std::cout << "###mean cte: " << mean_cte << "\n";
+
           double steer_value;
           /*
           * TODO: Calcuate steering value here, remember the steering value is
@@ -57,9 +78,11 @@ int main()
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
+          pid.UpdateError(cte);
+          steer_value = pid.TotalError();
           
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          std::cout << num_of_steps << ": CTE: " << cte << " Steering Value: " << steer_value << std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
