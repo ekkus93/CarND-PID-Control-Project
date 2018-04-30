@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
   }
   else 
   {
+    // final values
     init_Kp = -1.0; 
     init_Ki = -0.03; 
     init_Kd = -50.0; 
@@ -104,11 +105,14 @@ int main(int argc, char *argv[])
           // DEBUG
           std::cout << step_num << ": CTE: " << cte << " Steering Value: " << steer_value << std::endl;
 
-          cteWriter.Write(step_num, cte);
-          if (debug && max_steps > 0 && step_num > max_steps)
+          if (debug)
           {
-            cteWriter.Close();
-            exit(EXIT_SUCCESS);
+            cteWriter.Write(step_num, cte);
+            if (max_steps > 0 && step_num > max_steps)
+            {
+              cteWriter.Close();
+              exit(EXIT_SUCCESS);
+            }
           }
           step_num++;
 
