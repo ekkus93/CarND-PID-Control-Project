@@ -1,9 +1,14 @@
 #include <uWS/uWS.h>
 #include <iostream>
+#include <fstream>
+#include <string>
 #include "json.hpp"
 #include "PID.h"
 #include <math.h>
 #include <stdlib.h> 
+#include "ctewriter.h"
+
+using namespace std;
 
 // for convenience
 using json = nlohmann::json;
@@ -33,25 +38,40 @@ int main(int argc, char *argv[])
 {
   uWS::Hub h;
 
-  int max_steps = atoi(argv[4]);
-  int num_of_steps = 0;
-  double total_cte = 0.0;
+  int max_steps;
+  double init_Kp;
+  double init_Ki;
+  double init_Kd;
+  string outfilename;
+  CTEWriter cteWriter;
+  bool debug = (argc == 6);
+
+  if (debug)
+  {
+    max_steps = atoi(argv[4]);
+    init_Kp = atof(argv[1]);
+    init_Ki = atof(argv[2]);
+    init_Kd = atof(argv[3]);
+    outfilename = argv[5];
+    cteWriter.Open(outfilename);
+  }
+  else 
+  {
+    init_Kp = -1.0; 
+    init_Ki = -0.03; 
+    init_Kd = -50.0; 
+    max_steps = 0;
+  }
+
+  int step_num = 0;
+  double total_square_err = 0.0;
 
   PID pid;
   // TODO: Initialize the pid variable.
-  double init_Kp = atof(argv[1]);
-  double init_Ki = atof(argv[2]);
-  double init_Kd = atof(argv[3]);
   pid.Init(init_Kp, init_Ki, init_Kd);
 
-  h.onMessage([&pid, &max_steps, &num_of_steps, &total_cte](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
-    num_of_steps++;
-
-    if (max_steps > 0 && num_of_steps > max_steps)
-    {
-      exit(EXIT_SUCCESS);
-    }
-
+  h.onMessage([&pid, &max_steps, &step_num, 
+              &total_square_err, &debug, &cteWriter](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -67,9 +87,9 @@ int main(int argc, char *argv[])
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
 
-          total_cte += cte;
-          double mean_cte = total_cte/num_of_steps;
-          std::cout << "###mean cte: " << mean_cte << "\n";
+          total_square_err += cte*cte;
+          double mse = total_square_err/step_num;
+          std::cout << "###mse: " << mse << "\n";
 
           double steer_value;
           /*
@@ -80,9 +100,17 @@ int main(int argc, char *argv[])
           */
           pid.UpdateError(cte);
           steer_value = pid.TotalError();
-          
+
           // DEBUG
-          std::cout << num_of_steps << ": CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          std::cout << step_num << ": CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+
+          cteWriter.Write(step_num, cte);
+          if (debug && max_steps > 0 && step_num > max_steps)
+          {
+            cteWriter.Close();
+            exit(EXIT_SUCCESS);
+          }
+          step_num++;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
